@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contour Roam 2 settings</title>
+<meta name="description" content="Edit the settings on a ContourROAM2 action camera in your browser. A replacement for the discontinued Contour Storyteller software.">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='4' fill='%23185fa5'/><circle cx='8' cy='8' r='3.2' fill='white'/></svg>">
+</head>
+<body>
+<main class="wrap">
+  <h1>Contour Roam 2 settings</h1>
+  <p class="sub">Storyteller is gone. Plug the camera in and change its settings here instead.</p>
+
+  <div id="status" class="note" hidden></div>
+
+  <section id="connect" class="card hero">
+    <p>
+      Plug the camera into USB with the record slider <strong>back</strong>, so it mounts as a
+      drive. Then pick that drive below — the settings file on it is often hidden, so letting
+      this page find it is easier than hunting for it yourself.
+    </p>
+    <div class="row">
+      <button id="pick-dir" class="primary" type="button">Connect camera</button>
+      <button id="resume" type="button" hidden></button>
+    </div>
+    <p id="fsa-only" style="margin-top:4px">
+      Drive not showing up?
+      <button id="pick-file" class="link" type="button">Choose FW_RTC.txt yourself</button>
+    </p>
+    <p id="fallback-note" class="note warn" hidden style="text-align:left">
+      This browser cannot save directly to the camera. You can still edit your settings here —
+      load the file, make changes, and the page will hand you a new <code>FW_RTC.txt</code> to
+      copy back onto the camera. For one-click saving, use Chrome, Edge, Brave or Arc.
+    </p>
+    <p style="margin-top:14px">
+      <label class="link" for="upload" style="cursor:pointer">Open a FW_RTC.txt copy instead</label>
+      <input id="upload" type="file" accept=".txt,text/plain" class="sr">
+    </p>
+  </section>
+
+  <section id="editor" hidden>
+    <div id="bar" class="bar"></div>
+    <div id="form"></div>
+    <div class="savebar">
+      <button id="save" class="primary" type="button" disabled>Save to camera</button>
+      <span id="count" class="count"></span>
+      <button id="revert" class="link" type="button" hidden style="margin-left:auto">Undo all changes</button>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      Nothing leaves your computer — this page has no server.
+      <a href="https://github.com/DillPickleSwimmer/contour-roam-settings">Source and issues on GitHub</a>.
+    </p>
+    <p>&copy; <span id="year"></span> · MIT licensed · not affiliated with Contour, Inc.</p>
+  </footer>
+</main>
+<script type="module">
+  import { start } from './src/app.js';
+  start();
+</script>
+</body>
+</html>

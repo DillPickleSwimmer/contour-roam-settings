@@ -1,0 +1,17 @@
+{
+  "name": "contour-roam-settings",
+  "version": "0.1.0",
+  "description": "Edit ContourROAM2 camera settings in the browser. A replacement for the discontinued Contour Storyteller software.",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8731",
+    "test": "node --test test/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DillPickleSwimmer/contour-roam-settings.git"
+  },
+  "keywords": ["contour", "contourroam2", "storyteller", "action-camera", "fw_rtc"]
+}

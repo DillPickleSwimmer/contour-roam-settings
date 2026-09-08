@@ -8,9 +8,15 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Node 20 and 22 disagree about how `--test <dir>` is interpreted, so
+        # the bare form is used below and both versions are checked.
+        node: ['20', '22']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - run: node --test test/
+          node-version: ${{ matrix.node }}
+      - run: node --test

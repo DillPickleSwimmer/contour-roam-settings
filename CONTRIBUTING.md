@@ -27,7 +27,7 @@ hardware. Nothing in this project should ever write them.
 ## Running things
 
 ```bash
-node --test test/          # tests
+node --test                  # tests
 python3 -m http.server 8731  # the app
 ```
 

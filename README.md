@@ -101,7 +101,7 @@ python3 -m http.server 8731   # then open http://localhost:8731
 ```
 
 ```bash
-node --test test/
+node --test
 ```
 
 - `src/format.js` — parses and re-serializes `FW_RTC.txt`, preserving bytes

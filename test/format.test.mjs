@@ -128,3 +128,14 @@ test('byte decoding is an exact inverse of encoding', async () => {
   assert.equal(text.charCodeAt(0x80), 0x80);
   assert.equal(text.charCodeAt(0x9f), 0x9f);
 });
+
+test('exposes the value a key had when the file was read', () => {
+  const f = parse(SAMPLE);
+  f.set('DT', '2026/01/01 00:00:00');
+  assert.equal(f.original('DT'), '2013/02/06 16:57:29');
+  assert.equal(f.get('DT'), '2026/01/01 00:00:00');
+  // Restoring from original clears the dirty flag, which is what the clock
+  // opt-out relies on.
+  f.set('DT', f.original('DT'));
+  assert.equal(f.dirty, false);
+});

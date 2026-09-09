@@ -52,7 +52,7 @@ export const GLOBAL_FIELDS = [
   { id: 'FPS', label: 'Frame rate', type: 'enum', group: 'video', options: [['25', '25 / 50 · PAL'], ['30', '30 / 60 · NTSC']] },
   { id: 'CAMERA NAME', label: 'Camera name', type: 'text', group: 'camera', maxLength: 20 },
   { id: 'DATA', label: 'Note', type: 'text', group: 'camera', maxLength: 100 },
-  { id: 'DT', label: 'Clock', type: 'datetime', group: 'camera' },
+  { id: 'DT', label: 'Clock', type: 'clock', group: 'camera', hint: (v) => `camera reads ${v}` },
 ];
 
 export const GROUPS = [

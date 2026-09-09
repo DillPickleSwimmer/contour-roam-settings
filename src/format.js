@@ -96,6 +96,11 @@ export class SettingsFile {
     return [...this.index.keys()];
   }
 
+  // The value as the file was read, before any edit in this session.
+  original(key) {
+    return this.originals.get(normalizeKey(key));
+  }
+
   // Every key whose value differs from the file as it was read.
   changes() {
     const out = [];

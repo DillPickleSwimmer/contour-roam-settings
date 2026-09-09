@@ -7,6 +7,27 @@ import * as camera from './camera.js';
 
 const $ = (id) => document.getElementById(id);
 
+// Stamping the clock on save is the default. The opt-out is a per-browser
+// convenience, so a blocked or private store just means the default applies.
+const CLOCK_PREF = 'contour:sync-clock';
+
+function syncClock() {
+  try {
+    return localStorage.getItem(CLOCK_PREF) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+function setSyncClock(on) {
+  try {
+    localStorage.setItem(CLOCK_PREF, on ? 'on' : 'off');
+  } catch {
+    // Preference is optional; the clock still syncs by default.
+  }
+  renderSaveBar();
+}
+
 const state = {
   file: null,      // SettingsFile
   handle: null,    // FileSystemFileHandle, when we can write in place
@@ -80,7 +101,8 @@ const ctx = {
     else renderSaveBar();
   },
   fps: () => state.file.get('FPS') ?? '30',
-  now: () => formatDT(new Date()),
+  syncClock,
+  setSyncClock,
 };
 
 function render() {
@@ -137,18 +159,21 @@ function render() {
 }
 
 function renderSaveBar() {
-  const changes = state.file.changes().filter((c) => c.norm !== 'UPDATE');
+  const changes = state.file.changes().filter((c) => c.norm !== 'UPDATE' && c.norm !== 'DT');
   const n = changes.length;
-  $('save').disabled = n === 0;
-  $('count').replaceChildren(
-    n === 0
-      ? document.createTextNode('No changes yet')
-      : el('span', {}, [
-          el('b', { textContent: `${n} change${n === 1 ? '' : 's'}` }),
-          document.createTextNode(' · will set '),
-          el('code', { textContent: 'UPDATE:Y' }),
-        ])
-  );
+  const clock = syncClock() && state.file.has('DT');
+
+  // Syncing the clock is worth a save on its own, so it can enable the button.
+  $('save').disabled = n === 0 && !clock;
+
+  const parts = [];
+  if (n === 0) parts.push(document.createTextNode(clock ? 'Clock only' : 'No changes yet'));
+  else parts.push(el('b', { textContent: `${n} change${n === 1 ? '' : 's'}` }));
+  parts.push(document.createTextNode(' · sets '));
+  parts.push(el('code', { textContent: 'UPDATE:Y' }));
+  if (clock) parts.push(document.createTextNode(' and the clock'));
+
+  $('count').replaceChildren(el('span', {}, parts));
   $('revert').hidden = n === 0;
 }
 
@@ -180,6 +205,10 @@ async function disconnect() {
 
 async function save() {
   const file = state.file;
+  // The clock is app-managed either way: stamp it, or put back whatever the
+  // card already had. Without the second half, a stamp from an earlier save in
+  // this session would survive being switched off.
+  if (file.has('DT')) file.set('DT', syncClock() ? formatDT(new Date()) : file.original('DT'));
   // The camera ignores an edited file unless this flag is set. Storyteller did
   // the same thing; it is the whole reason a settings change takes effect.
   if (file.has('UPDATE')) file.set('UPDATE', 'Y');

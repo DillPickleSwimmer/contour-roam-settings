@@ -61,7 +61,15 @@ is the camera describing itself.
 | Frame rate | `FPS` | `25` PAL, `30` NTSC |
 | Camera name | `CAMERA NAME` | up to 20 characters |
 | Note | `DATA` | up to 100 characters |
-| Clock | `DT` | `YYYY/MM/DD hh:mm:ss` |
+| Clock | `DT` | `YYYY/MM/DD hh:mm:ss` — set to your computer's time on save by default |
+
+### The clock
+
+Every save stamps `DT` with your computer's current time. These cameras lose the clock
+whenever the battery goes flat, and a wrong clock means every file is dated wrong — so the
+useful default is to fix it whenever you are already writing the file. Switch the Clock row
+to **Leave alone** if you would rather it stayed as the camera has it; the choice is
+remembered in your browser.
 
 `FPS` changes what the resolution letters mean: `D` is 720p50 on PAL and 720p60 on NTSC.
 The app relabels the dropdown when you switch, so you always see the real frame rate.

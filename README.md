@@ -14,14 +14,16 @@ computer — the browser reads and writes it locally.
 
 ## Using it
 
-1. Plug the camera into USB with the record slider **back** (not in the ON position).
-   The battery LED turns red and the camera mounts as a drive.
-2. Open the app and click **Connect camera**, then pick the camera's drive.
-3. Change what you want and click **Save to camera**.
-4. Eject the drive, unplug the cable, then press and release the status button.
-   The camera beeps, turns off, and comes back with the new settings.
+1. Put the camera's memory card in a card reader, or plug the camera itself into USB with
+   the record slider **back** (not in the ON position). Either way it mounts as a drive.
+2. Open the app, click **Open camera settings**, and pick that drive.
+3. Change what you want. Edited rows are highlighted as you go, and the **(i)** beside each
+   label explains what the setting does.
+4. Click **Save settings**.
+5. Eject the drive, put the card back in the camera if you used a reader, and turn the
+   camera on.
 
-Step 4 is not optional. The camera only reads the file on a fresh start.
+Step 5 is not optional. The camera only reads the file at startup.
 
 ### Browser support
 
@@ -67,9 +69,14 @@ is the camera describing itself.
 
 Every save stamps `DT` with your computer's current time. These cameras lose the clock
 whenever the battery goes flat, and a wrong clock means every file is dated wrong — so the
-useful default is to fix it whenever you are already writing the file. Switch the Clock row
-to **Leave alone** if you would rather it stayed as the camera has it; the choice is
-remembered in your browser.
+useful default is to fix it whenever you are already writing the file.
+
+The Clock row offers three choices, remembered in your browser:
+
+- **Set to now** — your computer's current time. The default.
+- **Pick a date** — a specific date and time, for when now is not what you want. The
+  firmware accepts 2012 through 2040 and the app will not save outside that.
+- **Leave alone** — keeps whatever the card already has.
 
 `FPS` changes what the resolution letters mean: `D` is 720p50 on PAL and 720p60 on NTSC.
 The app relabels the dropdown when you switch, so you always see the real frame rate.

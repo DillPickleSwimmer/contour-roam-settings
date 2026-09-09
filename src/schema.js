@@ -55,6 +55,27 @@ export const GLOBAL_FIELDS = [
   { id: 'DT', label: 'Clock', type: 'clock', group: 'camera', hint: (v) => `camera reads ${v}` },
 ];
 
+// Plain-language explanation of each setting, keyed by field id. Kept apart
+// from the field definitions so the prose is easy to read and edit on its own.
+// Written for someone who owns the camera, not someone who reads spec sheets.
+export const ABOUT = {
+  RES: 'Frame size and speed. 1080p captures the most detail; the 720p fast option gives the smoothest motion and handles shake better. Larger settings fill the card faster.',
+  BR: 'How much data per second the video is encoded with. High looks better and makes bigger files. Low fits noticeably more footage on the card.',
+  EV: 'Brightens or darkens the whole picture. Raise it when your subject sits in shadow, lower it when bright sky washes everything out.',
+  AE: 'Which part of the frame the camera reads to set exposure. Center suits most mounted use, Spot reads the middle only, Average balances the whole frame.',
+  AWB: 'Corrects colour for the light you are shooting in. Auto handles most situations. Pick a preset if footage comes out too orange or too blue.',
+  SHRP: 'How much edge definition the camera adds. 3 is neutral. Higher looks crisper but can leave visible halos along edges.',
+  CTST: 'Separation between the darkest and lightest parts of the picture. 62 is the factory value. Higher is punchier but loses detail in shadows.',
+  MIC: 'Microphone gain. Lower it when wind or engine noise drowns everything out. Raise it for quiet speech.',
+  LSR: 'The two red lasers that project a level line so you can aim the camera while mounting it. They never appear in the recording.',
+  LED: 'The indicator lights on the camera body. Turning them off is less conspicuous and saves a little battery.',
+  SILENT: 'The tones the camera plays to confirm that recording started and stopped.',
+  FPS: 'PAL or NTSC timing. This also decides what the resolution options mean: the fast option is 50fps on PAL and 60fps on NTSC. Match it to the standard where you live.',
+  'CAMERA NAME': 'A label stored on the camera, up to 20 characters. Cosmetic, and handy if you own more than one.',
+  DATA: 'A free text line the camera stores and otherwise leaves alone, up to 100 characters.',
+  DT: 'The camera’s own date and time, stamped onto every file it records. It falls back to 2012 whenever the battery goes flat, so it is worth setting while you are here.',
+};
+
 export const GROUPS = [
   { id: 'video', label: 'Video' },
   { id: 'image', label: 'Image' },
@@ -80,6 +101,24 @@ export function describeCamera(file) {
   const version = (file.get('FW version') || '').trim();
   const supported = /contour/i.test(name);
   return { name: name || 'Unknown camera', version, supported };
+}
+
+// The firmware documents its clock as accepting 2012 through 2040.
+export const DT_MIN_YEAR = 2012;
+export const DT_MAX_YEAR = 2040;
+
+// Between the camera's "YYYY/MM/DD hh:mm:ss" and what <input type="datetime-local"> wants.
+export function toInputValue(cameraDT) {
+  const m = /^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(cameraDT ?? '');
+  return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}` : '';
+}
+
+export function fromInputValue(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value ?? '');
+  if (!m) return null;
+  const year = Number(m[1]);
+  if (year < DT_MIN_YEAR || year > DT_MAX_YEAR) return null;
+  return `${m[1]}/${m[2]}/${m[3]} ${m[4]}:${m[5]}:${m[6] ?? '00'}`;
 }
 
 // "2013/02/06 16:57:29" as written by the camera.

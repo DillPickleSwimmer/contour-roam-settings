@@ -1,6 +1,6 @@
 // Builds one form control per schema field. Pure DOM, no framework.
 
-import { fieldOptions, validate } from './schema.js';
+import { fieldOptions, validate, ABOUT, toInputValue, fromInputValue, DT_MIN_YEAR, DT_MAX_YEAR } from './schema.js';
 
 const el = (tag, props = {}, kids = []) => {
   const node = Object.assign(document.createElement(tag), props);
@@ -79,19 +79,77 @@ function textControl(field, value, onChange) {
   return input;
 }
 
-// The clock is not edited by hand. It is stamped with the current time on save
-// unless the user opts out, because a camera whose clock is wrong dates every
-// file it records wrong, and a button you have to remember is a button nobody
-// presses.
-function clockControl(ctx) {
-  return segmented(
-    [['on', 'Set to now on save'], ['off', 'Leave alone']],
-    ctx.syncClock() ? 'on' : 'off',
-    (v) => {
-      ctx.setSyncClock(v === 'on');
+// The clock is stamped on save rather than edited in place, because a camera
+// whose clock is wrong dates every file it records wrong, and a button you have
+// to remember is a button nobody presses. "Pick a date" is there for the case
+// where the current time is not what you want.
+function clockControl(value, ctx) {
+  const wrap = el('div', { className: 'stack-sm' });
+  const error = el('p', { className: 'err', hidden: true });
+
+  const picker = el('input', { type: 'datetime-local', step: '1' });
+  picker.value = ctx.clockCustom() || toInputValue(value);
+  picker.setAttribute('aria-label', 'Date and time to set on the camera');
+
+  const validatePicker = () => {
+    const ok = fromInputValue(picker.value);
+    error.textContent = ok
+      ? ''
+      : `Enter a date and time between ${DT_MIN_YEAR} and ${DT_MAX_YEAR}`;
+    error.hidden = Boolean(ok);
+    return Boolean(ok);
+  };
+
+  picker.oninput = () => {
+    ctx.setClockCustom(picker.value);
+    validatePicker();
+  };
+
+  const showPicker = () => {
+    const custom = ctx.clockMode() === 'custom';
+    picker.hidden = !custom;
+    if (custom) validatePicker();
+    else error.hidden = true;
+  };
+
+  const seg = segmented(
+    [['now', 'Set to now'], ['custom', 'Pick a date'], ['off', 'Leave alone']],
+    ctx.clockMode(),
+    (mode) => {
+      ctx.setClockMode(mode);
+      showPicker();
       return true;
     }
   );
+
+  showPicker();
+  wrap.append(seg, picker, error);
+  return wrap;
+}
+
+// A hoverable "i" that explains what a setting does. Also opens on click, so it
+// works on touch, and on keyboard focus.
+function infoButton(tipId, text) {
+  const wrap = el('span', { className: 'info-wrap' });
+  const button = el('button', { type: 'button', className: 'info', textContent: 'i' });
+  button.setAttribute('aria-label', 'What this setting does');
+  button.setAttribute('aria-expanded', 'false');
+  button.setAttribute('aria-describedby', tipId);
+
+  const tip = el('span', { className: 'tip', id: tipId, role: 'tooltip', textContent: text });
+
+  const setOpen = (open) => {
+    wrap.classList.toggle('open', open);
+    button.setAttribute('aria-expanded', String(open));
+  };
+  button.onclick = () => setOpen(!wrap.classList.contains('open'));
+  button.onkeydown = (e) => {
+    if (e.key === 'Escape') setOpen(false);
+  };
+  button.onblur = () => setOpen(false);
+
+  wrap.append(button, tip);
+  return wrap;
 }
 
 // Renders a labelled row and keeps its inline validation message in sync.
@@ -114,7 +172,7 @@ export function fieldRow(field, key, value, ctx) {
   if (field.type === 'enum') control = enumControl(field, value, ctx.fps(), onChange);
   else if (field.type === 'range') control = rangeControl(field, value, onChange);
   else if (field.type === 'toggle') control = toggleControl(field, value, onChange);
-  else if (field.type === 'clock') control = clockControl(ctx);
+  else if (field.type === 'clock') control = clockControl(value, ctx);
   else control = textControl(field, value, onChange);
 
   // Button groups have no single labelable element, so they get an accessible
@@ -125,10 +183,13 @@ export function fieldRow(field, key, value, ctx) {
 
   const label = el('label', labelable ? { htmlFor: id } : {});
   label.append(field.label);
+  const about = ABOUT[field.id];
+  if (about) label.append(' ', infoButton(`${id}-tip`, about));
   const hint = typeof field.hint === 'function' ? field.hint(value) : field.hint;
   if (hint) label.append(el('span', { className: 'hint', textContent: hint }));
 
   const row = el('div', { className: 'row' }, [label, control]);
+  row.dataset.key = key;
   row.append(error);
   return row;
 }

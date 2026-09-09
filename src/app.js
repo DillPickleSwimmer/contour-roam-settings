@@ -1,30 +1,52 @@
-import { parse } from './format.js';
+import { parse, normalizeKey } from './format.js';
 import {
-  PROFILE_FIELDS, GLOBAL_FIELDS, GROUPS, detectProfiles, describeCamera, formatDT,
+  PROFILE_FIELDS, GLOBAL_FIELDS, GROUPS, detectProfiles, describeCamera, formatDT, fromInputValue,
 } from './schema.js';
 import { fieldRow, el } from './ui.js';
 import * as camera from './camera.js';
 
 const $ = (id) => document.getElementById(id);
 
-// Stamping the clock on save is the default. The opt-out is a per-browser
-// convenience, so a blocked or private store just means the default applies.
+// Stamping the clock on save is the default. These preferences are a
+// per-browser convenience, so a blocked or private store just means the
+// defaults apply.
 const CLOCK_PREF = 'contour:sync-clock';
+const CLOCK_CUSTOM_PREF = 'contour:clock-custom';
 
-function syncClock() {
+const read = (key) => {
   try {
-    return localStorage.getItem(CLOCK_PREF) !== 'off';
+    return localStorage.getItem(key);
   } catch {
-    return true;
+    return null;
   }
+};
+
+const write = (key, value) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Preferences are optional.
+  }
+};
+
+// 'now' stamps the current time, 'custom' uses the picked date, 'off' keeps
+// whatever the card already has. An earlier build stored on/off here.
+function clockMode() {
+  const stored = read(CLOCK_PREF);
+  if (stored === 'off') return 'off';
+  if (stored === 'custom') return 'custom';
+  return 'now';
 }
 
-function setSyncClock(on) {
-  try {
-    localStorage.setItem(CLOCK_PREF, on ? 'on' : 'off');
-  } catch {
-    // Preference is optional; the clock still syncs by default.
-  }
+function setClockMode(mode) {
+  write(CLOCK_PREF, mode);
+  renderSaveBar();
+}
+
+const clockCustom = () => read(CLOCK_CUSTOM_PREF) ?? '';
+
+function setClockCustom(value) {
+  write(CLOCK_CUSTOM_PREF, value);
   renderSaveBar();
 }
 
@@ -101,8 +123,10 @@ const ctx = {
     else renderSaveBar();
   },
   fps: () => state.file.get('FPS') ?? '30',
-  syncClock,
-  setSyncClock,
+  clockMode,
+  setClockMode,
+  clockCustom,
+  setClockCustom,
 };
 
 function render() {
@@ -158,10 +182,21 @@ function render() {
   renderSaveBar();
 }
 
+// Tints the rows the user has actually altered, so pending edits are visible in
+// the form itself and not only as a count at the bottom.
+function markChangedRows() {
+  const dirty = new Set(
+    state.file.changes().map((c) => c.norm).filter((k) => k !== 'DT' && k !== 'UPDATE')
+  );
+  for (const row of $('form').querySelectorAll('.row[data-key]')) {
+    row.classList.toggle('changed', dirty.has(normalizeKey(row.dataset.key)));
+  }
+}
+
 function renderSaveBar() {
   const changes = state.file.changes().filter((c) => c.norm !== 'UPDATE' && c.norm !== 'DT');
   const n = changes.length;
-  const clock = syncClock() && state.file.has('DT');
+  const clock = clockMode() !== 'off' && state.file.has('DT');
 
   // Syncing the clock is worth a save on its own, so it can enable the button.
   $('save').disabled = n === 0 && !clock;
@@ -175,13 +210,14 @@ function renderSaveBar() {
 
   $('count').replaceChildren(el('span', {}, parts));
   $('revert').hidden = n === 0;
+  markChangedRows();
 }
 
 // --- actions ---------------------------------------------------------------
 
 async function connectDirectory() {
   const handle = await camera.pickDirectory();
-  await fromHandle(handle, `${handle.name} on the camera drive`);
+  await fromHandle(handle, `FW_RTC.txt on ${handle.name}`);
   await camera.remember(handle);
 }
 
@@ -203,12 +239,22 @@ async function disconnect() {
   await refreshResume();
 }
 
+// Throws rather than silently writing a wrong date.
+function clockValue(file) {
+  const mode = clockMode();
+  if (mode === 'off') return file.original('DT');
+  if (mode === 'now') return formatDT(new Date());
+  const picked = fromInputValue(clockCustom());
+  if (!picked) throw new Error('Pick a valid date for the clock, or set the clock to "Set to now".');
+  return picked;
+}
+
 async function save() {
   const file = state.file;
-  // The clock is app-managed either way: stamp it, or put back whatever the
-  // card already had. Without the second half, a stamp from an earlier save in
-  // this session would survive being switched off.
-  if (file.has('DT')) file.set('DT', syncClock() ? formatDT(new Date()) : file.original('DT'));
+  // The clock is app-managed in every mode, including 'off': without putting
+  // the original back, a stamp from an earlier save in this session would
+  // survive being switched off.
+  if (file.has('DT')) file.set('DT', clockValue(file));
   // The camera ignores an edited file unless this flag is set. Storyteller did
   // the same thing; it is the whole reason a settings change takes effect.
   if (file.has('UPDATE')) file.set('UPDATE', 'Y');
@@ -218,12 +264,12 @@ async function save() {
     await camera.writeHandle(state.handle, text);
     await load(text, { handle: state.handle, origin: state.origin });
     status('good', el('div', {}, [
-      el('strong', { textContent: 'Saved to the camera. ' }),
-      document.createTextNode('To apply the settings:'),
+      el('strong', { textContent: 'Settings saved. ' }),
+      document.createTextNode('To apply them:'),
       el('ol', {}, [
-        el('li', { textContent: 'Eject the camera drive, then unplug the USB cable.' }),
-        el('li', { textContent: 'Press and release the status button. The camera beeps and turns off.' }),
-        el('li', { textContent: 'Turn it on again — the new settings are live.' }),
+        el('li', { textContent: 'Eject the drive, then unplug the reader or cable.' }),
+        el('li', { textContent: 'Put the card back in the camera if you used a reader.' }),
+        el('li', { textContent: 'Turn the camera on. It reads the file at startup and the new settings are live.' }),
       ]),
     ]));
   } else {
@@ -231,15 +277,15 @@ async function save() {
     // Two different reasons land here: the browser has no write access at all,
     // or the file was opened as a copy so there is no handle to write back to.
     const why = camera.canWriteInPlace
-      ? 'This is a copy rather than the file on the camera, so finish by hand:'
-      : 'This browser cannot write to the camera directly, so finish by hand:';
+      ? 'This is a copy rather than the file on the card, so finish by hand:'
+      : 'This browser cannot write to the card directly, so finish by hand:';
     status('good', el('div', {}, [
       el('strong', { textContent: 'Downloaded FW_RTC.txt. ' }),
       document.createTextNode(why),
       el('ol', {}, [
-        el('li', { textContent: 'Copy the downloaded FW_RTC.txt onto the camera drive, replacing the one there.' }),
-        el('li', { textContent: 'Eject the camera drive, then unplug the USB cable.' }),
-        el('li', { textContent: 'Press and release the status button, then turn the camera on again.' }),
+        el('li', { textContent: 'Copy the downloaded FW_RTC.txt onto the drive, replacing the one there.' }),
+        el('li', { textContent: 'Eject the drive, then unplug the reader or cable.' }),
+        el('li', { textContent: 'Put the card back in the camera if you used a reader, then turn the camera on.' }),
       ]),
     ]));
   }

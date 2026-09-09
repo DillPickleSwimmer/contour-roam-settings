@@ -24,6 +24,18 @@ anything. The camera firmware is the consumer here and it is not a tolerant pars
 Two keys are off limits: `UPDATE_FW` triggers a firmware flash, and `CUID` identifies the
 hardware. Nothing in this project should ever write them.
 
+## Ground rules for deleting
+
+`src/media.js` can erase someone's footage, so it is held to the same standard. It never
+removes `FW_RTC.txt`, `FW_RTC_DEFAULTS.txt` or a firmware `.bin` whatever folder they turn
+up in, it leaves the `DCIM` folders themselves in place, and it reports files it could not
+delete instead of stopping at the first failure. Deletion is behind a confirmation step
+that names the file count and the space involved.
+
+The tests run this against a real temporary directory through a stand-in for
+`FileSystemDirectoryHandle`, rather than a mock. If you change deletion, keep the tests
+that assert what must *not* be removed.
+
 ## Running things
 
 ```bash

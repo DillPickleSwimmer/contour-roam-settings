@@ -87,6 +87,31 @@ export const GROUPS = [
 // boot, and CUID / FW version identify the hardware.
 export const READ_ONLY = new Set(['UPDATE_FW', 'CUID', 'FW VERSION', 'FW NAME']);
 
+// Copies values out of the camera's own FW_RTC_DEFAULTS.txt into the live
+// settings. Only keys that exist in both files and are actually editable move
+// across, so identity (CUID, FW version) and the firmware flag stay put — the
+// defaults file carries its own CUID and a differently formatted version line.
+export function applyDefaults(file, defaults) {
+  const editable = new Set();
+  for (const field of GLOBAL_FIELDS) editable.add(normalizeFieldKey(field.id));
+  for (const profile of detectProfiles(file)) {
+    for (const field of PROFILE_FIELDS) editable.add(normalizeFieldKey(profile + field.id));
+  }
+
+  const applied = [];
+  for (const key of defaults.keys()) {
+    if (!editable.has(key) || READ_ONLY.has(key)) continue;
+    if (!file.has(key)) continue;
+    const next = defaults.get(key);
+    if (file.get(key) === next) continue;
+    file.set(key, next);
+    applied.push(key);
+  }
+  return applied;
+}
+
+const normalizeFieldKey = (key) => key.trim().toUpperCase().replace(/\s+/g, ' ');
+
 export function detectProfiles(file) {
   const found = new Set();
   for (const key of file.keys()) {

@@ -139,3 +139,38 @@ test('exposes the value a key had when the file was read', () => {
   f.set('DT', f.original('DT'));
   assert.equal(f.dirty, false);
 });
+
+const DEFAULTS = readFileSync(new URL('../samples/ContourROAM2_FW_RTC_DEFAULTS.txt', import.meta.url), 'latin1');
+
+test('reset copies the camera’s own defaults without touching identity', async () => {
+  const { applyDefaults } = await import('../src/schema.js');
+  const file = parse(SAMPLE);
+  const defaults = parse(DEFAULTS);
+
+  file.set('1MIC', '40');
+  file.set('1AWB', '5');
+  const applied = applyDefaults(file, defaults);
+
+  assert.ok(applied.includes('1MIC'));
+  assert.ok(applied.includes('1AWB'));
+  assert.equal(file.get('1MIC'), '17');
+  assert.equal(file.get('1AWB'), '0');
+
+  // The defaults file carries its own CUID and a differently formatted version
+  // line. Neither may leak into the live settings, and the firmware flag must
+  // never be written from it.
+  const touched = file.changes().map((c) => c.norm);
+  assert.ok(!touched.includes('CUID'));
+  assert.ok(!touched.includes('FW VERSION'));
+  assert.ok(!touched.includes('UPDATE_FW'));
+  assert.ok(!touched.includes('UPDATE'));
+});
+
+test('reset does not invent keys the live file lacks', async () => {
+  const { applyDefaults } = await import('../src/schema.js');
+  const file = parse('FW name:ContourROAM2\r\n1RES:A\r\n');
+  applyDefaults(file, parse(DEFAULTS));
+  assert.equal(file.get('1RES'), 'D');
+  assert.equal(file.has('1MIC'), false, 'must not add a key the camera did not write');
+  assert.equal(file.toText(), 'FW name:ContourROAM2\r\n1RES:D\r\n');
+});

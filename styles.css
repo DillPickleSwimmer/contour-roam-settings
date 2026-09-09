@@ -154,3 +154,19 @@ footer a { color: inherit; }
 .row.changed .seg button[aria-pressed="true"] {
   background: var(--panel); border-color: var(--accent); color: var(--accent);
 }
+
+.savebar-links { margin-left: auto; display: flex; gap: 16px; flex-wrap: wrap; }
+
+.media { margin-top: 26px; }
+.media-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.media-head h2 { font-size: 15px; font-weight: 600; margin: 0; }
+.media-sum { font-size: 13px; color: var(--ink-2); }
+.file { display: flex; align-items: center; gap: 12px; padding: 11px 18px; font-size: 14px; }
+.file + .file { border-top: 1px solid var(--line); }
+.file-name { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+.file-meta { margin-left: auto; font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.file.junk .file-name { color: var(--ink-3); text-decoration: line-through; }
+.folder-label { font-size: 12px; color: var(--ink-3); padding: 9px 18px; border-bottom: 1px solid var(--line); font-family: ui-monospace, Menlo, monospace; }
+.media-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+button.danger { border-color: var(--bad); color: var(--bad); }
+button.danger:hover:not(:disabled) { background: var(--bad-bg); }

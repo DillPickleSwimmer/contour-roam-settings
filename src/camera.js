@@ -53,7 +53,7 @@ export async function verifyPermission(handle, write) {
   return (await handle.requestPermission(opts)) === 'granted';
 }
 
-function findFile(dir) {
+export function findFile(dir) {
   return dir.getFileHandle(FILENAME).catch(async () => {
     // Some cards report a different case than the firmware documents.
     for await (const [name, handle] of dir.entries()) {
@@ -67,7 +67,7 @@ function findFile(dir) {
 
 export async function pickDirectory() {
   const dir = await window.showDirectoryPicker({ id: 'contour-camera', mode: 'readwrite' });
-  return findFile(dir);
+  return { dir, file: await findFile(dir) };
 }
 
 export async function pickFile() {
@@ -119,6 +119,15 @@ export async function writeHandle(handle, text) {
     throw err;
   }
   await writable.close();
+}
+
+export function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function download(text, name = FILENAME) {

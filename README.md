@@ -65,6 +65,29 @@ is the camera describing itself.
 | Note | `DATA` | up to 100 characters |
 | Clock | `DT` | `YYYY/MM/DD hh:mm:ss` — set to your computer's time on save by default |
 
+### Reset to factory defaults
+
+The camera writes its own `FW_RTC_DEFAULTS.txt` next to the settings file, so **Reset to
+factory defaults** restores the values your camera shipped with rather than values this app
+made up. It only copies keys that exist in both files and are actually editable, so your
+camera ID, the firmware version line and the firmware-update flag are left alone. Nothing
+is written until you press Save settings.
+
+This needs the drive to have been picked, since the defaults file sits beside the settings
+file. It is hidden if you opened the settings file on its own.
+
+### Recordings
+
+The app lists what is in `DCIM` — each file with its size and date, and the total. **Copy
+out** saves a file to your computer. **Delete all recordings** clears the card, after a
+confirmation naming how many files and how much space, and leaves the `DCIM` folders in
+place because the camera expects them. `FW_RTC.txt`, `FW_RTC_DEFAULTS.txt` and any firmware
+`.bin` are never touched.
+
+There is deliberately no "open in Finder" button. No browser can open a file manager
+window — there is no API for it at any permission level — so the list gives you the same
+information the folder would.
+
 ### The clock
 
 Every save stamps `DT` with your computer's current time. These cameras lose the clock

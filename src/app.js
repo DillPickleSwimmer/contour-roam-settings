@@ -1,9 +1,11 @@
 import { parse, normalizeKey } from './format.js';
 import {
   PROFILE_FIELDS, GLOBAL_FIELDS, GROUPS, detectProfiles, describeCamera, formatDT, fromInputValue,
+  applyDefaults,
 } from './schema.js';
 import { fieldRow, el } from './ui.js';
 import * as camera from './camera.js';
+import * as media from './media.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -53,8 +55,10 @@ function setClockCustom(value) {
 const state = {
   file: null,      // SettingsFile
   handle: null,    // FileSystemFileHandle, when we can write in place
+  dir: null,       // FileSystemDirectoryHandle, when the drive itself was picked
   origin: '',      // where it came from, shown to the user
   profile: '1',
+  confirmingWipe: false,
 };
 
 function show(view) {
@@ -75,7 +79,7 @@ function clearStatus() {
 
 // --- loading ---------------------------------------------------------------
 
-async function load(text, { handle = null, origin }) {
+async function load(text, { handle = null, dir = null, origin }) {
   const file = parse(text);
   const info = describeCamera(file);
   if (!info.supported) {
@@ -88,18 +92,21 @@ async function load(text, { handle = null, origin }) {
 
   state.file = file;
   state.handle = handle;
+  state.dir = dir;
   state.origin = origin;
+  state.confirmingWipe = false;
   state.profile = profiles[0];
   clearStatus();
   render();
   show('editor');
 }
 
-async function fromHandle(handle, origin) {
+async function fromHandle(handle, origin, dir = null) {
   if (!(await camera.verifyPermission(handle, true))) {
     throw new Error('Permission to edit that file was declined.');
   }
-  await load(await camera.readHandle(handle), { handle, origin });
+  await load(await camera.readHandle(handle), { handle, dir, origin });
+  if (dir) refreshMedia();
 }
 
 async function guard(fn) {
@@ -210,15 +217,134 @@ function renderSaveBar() {
 
   $('count').replaceChildren(el('span', {}, parts));
   $('revert').hidden = n === 0;
+  $('reset').hidden = !state.dir;
   markChangedRows();
+}
+
+// --- recordings ------------------------------------------------------------
+
+// A web page cannot open a Finder or Explorer window; there is no browser API
+// for it at any permission level. Listing what is on the card gives the same
+// information the folder would, and a copy button gives the same access.
+async function refreshMedia() {
+  const panel = $('media');
+  if (!state.dir) {
+    panel.replaceChildren();
+    return;
+  }
+
+  let listing;
+  try {
+    listing = await media.listMedia(state.dir);
+  } catch (err) {
+    panel.replaceChildren(el('p', { className: 'note bad', textContent: `Could not read recordings: ${err.message}` }));
+    return;
+  }
+
+  const card = el('section', { className: 'media' });
+  const summary = listing.videos
+    ? `${listing.videos} recording${listing.videos === 1 ? '' : 's'}` +
+      (listing.extras ? ` and ${listing.extras} related file${listing.extras === 1 ? '' : 's'}` : '') +
+      ` · ${media.formatBytes(listing.bytes)}`
+    : listing.present
+      ? 'No recordings on the card'
+      : 'No DCIM folder on this card';
+
+  card.append(
+    el('div', { className: 'media-head' }, [
+      el('h2', { textContent: 'Recordings' }),
+      el('span', { className: 'media-sum', textContent: summary }),
+    ])
+  );
+
+  if (listing.folders.length) {
+    const rows = el('div', { className: 'rows' });
+    for (const folder of listing.folders) {
+      rows.append(el('div', { className: 'folder-label', textContent: `DCIM/${folder.name}` }));
+      for (const file of folder.files) {
+        const meta = [media.formatBytes(file.size)];
+        if (file.modified) meta.push(new Date(file.modified).toLocaleDateString());
+        const row = el('div', { className: `file ${file.kind}` }, [
+          el('span', { className: 'file-name', textContent: file.name }),
+          el('span', { className: 'file-meta', textContent: meta.join(' · ') }),
+        ]);
+        if (file.kind === 'video' || file.kind === 'sidecar') {
+          const save = el('button', { type: 'button', textContent: 'Copy out', style: 'font-size:13px;padding:5px 10px' });
+          save.onclick = () =>
+            guard(async () => camera.downloadBlob(await file.handle.getFile(), file.name));
+          row.append(save);
+        }
+        rows.append(row);
+      }
+    }
+    card.append(rows);
+  }
+
+  const actions = el('div', { className: 'media-actions' });
+  const refresh = el('button', { type: 'button', textContent: 'Refresh' });
+  refresh.onclick = () => guard(refreshMedia);
+  actions.append(refresh);
+
+  const deletable = listing.folders.reduce((n, f) => n + f.files.length, 0);
+  if (deletable) {
+    if (state.confirmingWipe) {
+      const confirm = el('button', { type: 'button', className: 'danger', textContent: `Delete ${deletable} file${deletable === 1 ? '' : 's'} permanently` });
+      confirm.onclick = () => guard(wipeMedia);
+      const cancel = el('button', { type: 'button', textContent: 'Cancel' });
+      cancel.onclick = () => {
+        state.confirmingWipe = false;
+        refreshMedia();
+      };
+      actions.append(confirm, cancel);
+      card.append(
+        actions,
+        el('p', { className: 'note bad', style: 'margin-top:12px' }, [
+          el('strong', { textContent: 'This cannot be undone. ' }),
+          document.createTextNode(
+            `${media.formatBytes(listing.bytes)} will be erased from the card. Copy anything you want to keep first — the Copy out buttons above save a file to your computer.`
+          ),
+        ])
+      );
+    } else {
+      const wipe = el('button', { type: 'button', className: 'danger', textContent: 'Delete all recordings' });
+      wipe.onclick = () => {
+        state.confirmingWipe = true;
+        refreshMedia();
+      };
+      actions.append(wipe);
+      card.append(actions);
+    }
+  } else {
+    card.append(actions);
+  }
+
+  panel.replaceChildren(card);
+}
+
+async function wipeMedia() {
+  state.confirmingWipe = false;
+  const result = await media.deleteAllMedia(state.dir);
+  await refreshMedia();
+
+  if (result.failed.length) {
+    status('warn', el('div', {}, [
+      el('strong', { textContent: `Deleted ${result.attempted - result.failed.length} of ${result.attempted} files. ` }),
+      document.createTextNode(`Could not remove: ${result.failed.map((f) => f.name).join(', ')}.`),
+    ]));
+  } else {
+    status('good', el('span', {}, [
+      el('strong', { textContent: 'Card cleared. ' }),
+      document.createTextNode(`${result.attempted} file${result.attempted === 1 ? '' : 's'} deleted, ${media.formatBytes(result.freed)} freed.`),
+    ]));
+  }
 }
 
 // --- actions ---------------------------------------------------------------
 
 async function connectDirectory() {
-  const handle = await camera.pickDirectory();
-  await fromHandle(handle, `FW_RTC.txt on ${handle.name}`);
-  await camera.remember(handle);
+  const { dir, file } = await camera.pickDirectory();
+  await fromHandle(file, `FW_RTC.txt on ${dir.name}`, dir);
+  await camera.remember(dir);
 }
 
 async function connectFile() {
@@ -232,7 +358,8 @@ async function connectUpload(file) {
 }
 
 async function disconnect() {
-  state.file = state.handle = null;
+  state.file = state.handle = state.dir = null;
+  $('media').replaceChildren();
   await camera.forget();
   clearStatus();
   show('connect');
@@ -262,7 +389,7 @@ async function save() {
 
   if (state.handle) {
     await camera.writeHandle(state.handle, text);
-    await load(text, { handle: state.handle, origin: state.origin });
+    await load(text, { handle: state.handle, dir: state.dir, origin: state.origin });
     status('good', el('div', {}, [
       el('strong', { textContent: 'Settings saved. ' }),
       document.createTextNode('To apply them:'),
@@ -291,6 +418,24 @@ async function save() {
   }
 }
 
+async function resetToDefaults() {
+  const buf = await media.readDefaults(state.dir);
+  const defaults = parse(camera.decodeBytes(buf));
+  const applied = applyDefaults(state.file, defaults);
+
+  clearStatus();
+  render();
+
+  if (!applied.length) {
+    status('good', el('span', { textContent: 'Everything already matches the factory defaults.' }));
+  } else {
+    status('good', el('span', {}, [
+      el('strong', { textContent: `Reset ${applied.length} setting${applied.length === 1 ? '' : 's'}. ` }),
+      document.createTextNode('Nothing is written to the card until you press Save settings.'),
+    ]));
+  }
+}
+
 function revert() {
   const { file } = state;
   for (const change of file.changes()) file.set(change.key, change.from);
@@ -308,8 +453,9 @@ async function refreshResume() {
     button.textContent = `Reconnect ${handle.name}`;
     button.onclick = () =>
       guard(async () => {
-        const kind = handle.kind === 'directory' ? await handle.getFileHandle(camera.FILENAME) : handle;
-        await fromHandle(kind, handle.name);
+        const isDir = handle.kind === 'directory';
+        const file = isDir ? await camera.findFile(handle) : handle;
+        await fromHandle(file, isDir ? `FW_RTC.txt on ${handle.name}` : handle.name, isDir ? handle : null);
       });
   }
 }
@@ -332,6 +478,7 @@ export function start() {
   };
   $('save').onclick = () => guard(save);
   $('revert').onclick = revert;
+  $('reset').onclick = () => guard(resetToDefaults);
 
   refreshResume();
   show('connect');

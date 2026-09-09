@@ -81,7 +81,9 @@ file. It is hidden if you opened the settings file on its own.
 The app lists what is in `DCIM` — each file with its size and date, and the total.
 
 **Copy out all** asks for a folder on your computer and copies every recording into it,
-showing progress as it goes. Files are streamed rather than loaded into memory, so a card
+with a fallback: if the folder picker is cancelled or your browser will not open one, the
+app says so and offers to save the recordings to your downloads folder instead. Progress
+is shown as it goes. Files are streamed rather than loaded into memory, so a card
 full of gigabyte clips is fine. Nothing is ever overwritten: if a name is already taken —
 because you copied before, or two `DCIM` folders reuse a filename — the new one lands as
 `FILE0104 (2).MP4`. macOS resource forks (`._` files) are skipped. **Copy out** on a single

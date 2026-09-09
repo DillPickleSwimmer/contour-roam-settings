@@ -60,6 +60,7 @@ const state = {
   profile: '1',
   confirmingWipe: false,
   busy: null,      // text shown while a long copy or delete is running
+  noFolder: false, // the destination picker gave us nothing
 };
 
 function show(view) {
@@ -72,6 +73,9 @@ function status(kind, node) {
   box.className = `note ${kind}`;
   box.replaceChildren(node);
   box.hidden = false;
+  // The status sits at the top of the page, so a message about something the
+  // user just clicked at the bottom would otherwise go unseen.
+  box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 function clearStatus() {
@@ -96,6 +100,7 @@ async function load(text, { handle = null, dir = null, origin }) {
   state.dir = dir;
   state.origin = origin;
   state.confirmingWipe = false;
+  state.noFolder = false;
   state.profile = profiles[0];
   clearStatus();
   render();
@@ -306,6 +311,31 @@ async function refreshMedia() {
     actions.append(copyAll);
   }
 
+  // The destination picker gave us nothing, either because it was cancelled or
+  // because the browser refused to show it. Saying so beats a button that looks
+  // like it does nothing.
+  if (state.noFolder) {
+    const instead = el('button', { type: 'button', textContent: 'Save them to Downloads instead' });
+    instead.onclick = () => guard(downloadAllMedia);
+    const dismiss = el('button', { type: 'button', textContent: 'Cancel' });
+    dismiss.onclick = () => {
+      state.noFolder = false;
+      refreshMedia();
+    };
+    actions.append(instead, dismiss);
+    card.append(
+      actions,
+      el('p', { className: 'note warn', style: 'margin-top:12px' }, [
+        el('strong', { textContent: 'No folder chosen. ' }),
+        document.createTextNode(
+          'Either the folder picker was cancelled, or this browser would not open it. You can save the recordings to your downloads folder instead.'
+        ),
+      ])
+    );
+    panel.replaceChildren(card);
+    return;
+  }
+
   const deletable = listing.folders.reduce((n, f) => n + f.files.length, 0);
   if (deletable) {
     if (state.confirmingWipe) {
@@ -343,14 +373,29 @@ async function refreshMedia() {
 }
 
 async function copyAllMedia() {
-  const listing = await media.listMedia(state.dir);
-  // Ask for the destination before showing any progress, so cancelling the
-  // picker leaves the panel exactly as it was.
-  const dest = await window.showDirectoryPicker({ id: 'contour-export', mode: 'readwrite' });
+  // Called with nothing awaited in front of it, so the click's user activation
+  // is definitely still live when the picker is requested.
+  let dest;
+  try {
+    dest = await window.showDirectoryPicker({ id: 'contour-export', mode: 'readwrite' });
+  } catch (err) {
+    // AbortError covers both "user cancelled" and "the browser would not show
+    // the picker at all". Either way the previous behaviour was to do nothing
+    // and say nothing, which reads as a broken button.
+    if (['AbortError', 'SecurityError', 'NotAllowedError'].includes(err?.name)) {
+      state.noFolder = true;
+      await refreshMedia();
+      return;
+    }
+    throw err;
+  }
+
+  state.noFolder = false;
   if (!(await camera.verifyPermission(dest, true))) {
     throw new Error('Permission to write to that folder was declined.');
   }
 
+  const listing = await media.listMedia(state.dir);
   state.busy = 'Preparing to copy…';
   await refreshMedia();
 
@@ -381,6 +426,39 @@ async function copyAllMedia() {
       ),
     ]));
   }
+}
+
+// Fallback when no destination folder can be chosen: save each recording the
+// same way the per-row button does. The browser asks once about multiple
+// downloads, which is at least something the user can see and answer.
+async function downloadAllMedia() {
+  const listing = await media.listMedia(state.dir);
+  const files = listing.folders.flatMap((f) =>
+    f.files.filter((x) => x.kind === 'video' || x.kind === 'sidecar')
+  );
+
+  state.noFolder = false;
+  state.busy = 'Preparing…';
+  await refreshMedia();
+
+  try {
+    for (const [index, file] of files.entries()) {
+      state.busy = `Saving ${index + 1} of ${files.length} · ${file.name}`;
+      const label = $('media').querySelector('.busy');
+      if (label) label.textContent = state.busy;
+      camera.downloadBlob(await file.handle.getFile(), file.name);
+      // Give the browser a moment between downloads, or it drops them.
+      await new Promise((r) => setTimeout(r, 600));
+    }
+  } finally {
+    state.busy = null;
+    await refreshMedia();
+  }
+
+  status('good', el('span', {}, [
+    el('strong', { textContent: `Saved ${files.length} file${files.length === 1 ? '' : 's'}. ` }),
+    document.createTextNode('Check your downloads folder. Nothing on the card was changed.'),
+  ]));
 }
 
 async function wipeMedia() {

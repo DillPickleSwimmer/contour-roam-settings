@@ -46,9 +46,13 @@ buffered copy branch while a browser takes the streaming `pipeTo` branch. When y
 ## Running things
 
 ```bash
-node --test                  # tests
-python3 -m http.server 8731  # the app
+node --test              # tests
+python3 dev-server.py    # the app, on http://localhost:8731
 ```
+
+`dev-server.py` is a plain static server that sends `no-store`. Use it rather than
+`python3 -m http.server`: browsers cache ES modules hard enough that an edit appears to do
+nothing at all, which is a confusing way to lose an hour.
 
 No build step, no dependencies. Keep it that way if you can — a static page with no
 toolchain is the reason this will still work in ten years, which is more than the original

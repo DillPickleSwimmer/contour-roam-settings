@@ -105,6 +105,7 @@ async function load(text, { handle = null, dir = null, origin }) {
   clearStatus();
   render();
   show('editor');
+  await refreshMedia();
 }
 
 async function fromHandle(handle, origin, dir = null) {
@@ -112,7 +113,6 @@ async function fromHandle(handle, origin, dir = null) {
     throw new Error('Permission to edit that file was declined.');
   }
   await load(await camera.readHandle(handle), { handle, dir, origin });
-  if (dir) refreshMedia();
 }
 
 async function guard(fn) {
@@ -234,8 +234,50 @@ function renderSaveBar() {
 // information the folder would, and a copy button gives the same access.
 async function refreshMedia() {
   const panel = $('media');
+
+  // Recordings and factory reset both need the drive, not just the settings
+  // file. You end up here by picking the file directly, or by reconnecting a
+  // handle saved before this app started storing the directory. There is no way
+  // to reach a file's parent folder through the File System Access API, so the
+  // only route out is to pick the drive again — which the panel now says,
+  // instead of rendering nothing and looking broken.
   if (!state.dir) {
-    panel.replaceChildren();
+    const card = el('section', { className: 'media' });
+    card.append(
+      el('div', { className: 'media-head' }, [
+        el('h2', { textContent: 'Recordings' }),
+        el('span', { className: 'media-sum', textContent: 'Needs the camera drive' }),
+      ])
+    );
+
+    const actions = el('div', { className: 'media-actions' });
+    if (camera.canPickDirectory) {
+      const connect = el('button', { type: 'button', textContent: 'Connect the camera drive' });
+      // Checked on click, not at render: this panel is not rebuilt as the form
+      // changes, so a value captured here would go stale the moment you edit.
+      connect.onclick = () =>
+        guard(async () => {
+          if (state.file?.dirty) {
+            throw new Error(
+              'Save or undo your changes first — reconnecting reloads the settings from the card and would discard them.'
+            );
+          }
+          await connectDirectory();
+        });
+      actions.append(connect);
+    }
+    card.append(
+      actions,
+      el('p', { className: 'note', style: 'margin-top:12px' }, [
+        document.createTextNode(
+          camera.canPickDirectory
+            ? 'You opened the settings file on its own, so this page cannot see the recordings or the factory defaults beside it. Pick the drive to get those.'
+            : 'This browser cannot browse the card, so recordings are not available here. Settings editing still works.'
+        ),
+      ])
+    );
+
+    panel.replaceChildren(card);
     return;
   }
 

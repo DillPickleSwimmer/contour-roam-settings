@@ -74,7 +74,8 @@ camera ID, the firmware version line and the firmware-update flag are left alone
 is written until you press Save settings.
 
 This needs the drive to have been picked, since the defaults file sits beside the settings
-file. It is hidden if you opened the settings file on its own.
+file. If you opened the settings file on its own, the Recordings panel says so and offers a
+button to connect the drive.
 
 ### Recordings
 
@@ -92,6 +93,12 @@ row does the same for one file.
 **Delete all recordings** clears the card, after a confirmation naming how many files and
 how much space, and leaves the `DCIM` folders in place because the camera expects them.
 `FW_RTC.txt`, `FW_RTC_DEFAULTS.txt` and any firmware `.bin` are never touched.
+
+Recordings and factory reset both need the **drive**, not just the settings file. If you
+used "Choose FW_RTC.txt yourself", or you are reconnecting a shortcut saved by an older
+version of this page, the panel explains that and offers to connect the drive. There is no
+way to reach a file's parent folder through the browser, so picking the drive again is the
+only route.
 
 There is deliberately no "open in Finder" button. No browser can open a file manager
 window — there is no API for it at any permission level — so the list gives you the same
@@ -144,7 +151,7 @@ your `FW_RTC.txt` attached** — that file is all it takes to add a model.
 No build step and no dependencies. It is plain ES modules.
 
 ```bash
-python3 -m http.server 8731   # then open http://localhost:8731
+python3 dev-server.py   # then open http://localhost:8731
 ```
 
 ```bash

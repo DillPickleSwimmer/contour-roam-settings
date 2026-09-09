@@ -78,11 +78,18 @@ file. It is hidden if you opened the settings file on its own.
 
 ### Recordings
 
-The app lists what is in `DCIM` — each file with its size and date, and the total. **Copy
-out** saves a file to your computer. **Delete all recordings** clears the card, after a
-confirmation naming how many files and how much space, and leaves the `DCIM` folders in
-place because the camera expects them. `FW_RTC.txt`, `FW_RTC_DEFAULTS.txt` and any firmware
-`.bin` are never touched.
+The app lists what is in `DCIM` — each file with its size and date, and the total.
+
+**Copy out all** asks for a folder on your computer and copies every recording into it,
+showing progress as it goes. Files are streamed rather than loaded into memory, so a card
+full of gigabyte clips is fine. Nothing is ever overwritten: if a name is already taken —
+because you copied before, or two `DCIM` folders reuse a filename — the new one lands as
+`FILE0104 (2).MP4`. macOS resource forks (`._` files) are skipped. **Copy out** on a single
+row does the same for one file.
+
+**Delete all recordings** clears the card, after a confirmation naming how many files and
+how much space, and leaves the `DCIM` folders in place because the camera expects them.
+`FW_RTC.txt`, `FW_RTC_DEFAULTS.txt` and any firmware `.bin` are never touched.
 
 There is deliberately no "open in Finder" button. No browser can open a file manager
 window — there is no API for it at any permission level — so the list gives you the same

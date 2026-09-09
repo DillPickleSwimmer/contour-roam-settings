@@ -170,3 +170,4 @@ footer a { color: inherit; }
 .media-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
 button.danger { border-color: var(--bad); color: var(--bad); }
 button.danger:hover:not(:disabled) { background: var(--bad-bg); }
+.busy { font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }

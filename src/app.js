@@ -59,6 +59,7 @@ const state = {
   origin: '',      // where it came from, shown to the user
   profile: '1',
   confirmingWipe: false,
+  busy: null,      // text shown while a long copy or delete is running
 };
 
 function show(view) {
@@ -281,9 +282,29 @@ async function refreshMedia() {
   }
 
   const actions = el('div', { className: 'media-actions' });
+
+  // While a copy or delete is running, show progress instead of controls so
+  // nothing can be started on top of it.
+  if (state.busy) {
+    actions.append(el('span', { className: 'busy', textContent: state.busy }));
+    card.append(actions);
+    panel.replaceChildren(card);
+    return;
+  }
+
   const refresh = el('button', { type: 'button', textContent: 'Refresh' });
   refresh.onclick = () => guard(refreshMedia);
   actions.append(refresh);
+
+  const copyable = listing.folders.reduce(
+    (n, f) => n + f.files.filter((x) => x.kind === 'video' || x.kind === 'sidecar').length,
+    0
+  );
+  if (copyable && camera.canPickDirectory) {
+    const copyAll = el('button', { type: 'button', textContent: `Copy out all ${copyable} files` });
+    copyAll.onclick = () => guard(copyAllMedia);
+    actions.append(copyAll);
+  }
 
   const deletable = listing.folders.reduce((n, f) => n + f.files.length, 0);
   if (deletable) {
@@ -321,15 +342,70 @@ async function refreshMedia() {
   panel.replaceChildren(card);
 }
 
+async function copyAllMedia() {
+  const listing = await media.listMedia(state.dir);
+  // Ask for the destination before showing any progress, so cancelling the
+  // picker leaves the panel exactly as it was.
+  const dest = await window.showDirectoryPicker({ id: 'contour-export', mode: 'readwrite' });
+  if (!(await camera.verifyPermission(dest, true))) {
+    throw new Error('Permission to write to that folder was declined.');
+  }
+
+  state.busy = 'Preparing to copy…';
+  await refreshMedia();
+
+  let result;
+  try {
+    result = await media.copyAllTo(dest, listing, ({ index, done, total, name }) => {
+      state.busy = name ? `Copying ${index + 1} of ${total} · ${name}` : `Copied ${done} of ${total}`;
+      const label = $('media').querySelector('.busy');
+      if (label) label.textContent = state.busy;
+    });
+  } finally {
+    state.busy = null;
+    await refreshMedia();
+  }
+
+  if (result.failed.length) {
+    status('warn', el('div', {}, [
+      el('strong', { textContent: `Copied ${result.copied} of ${result.total} files to ${dest.name}. ` }),
+      document.createTextNode(
+        `Could not copy ${result.failed.map((f) => f.name).join(', ')} — ${result.failed[0].reason}`
+      ),
+    ]));
+  } else {
+    status('good', el('span', {}, [
+      el('strong', { textContent: `Copied ${result.copied} file${result.copied === 1 ? '' : 's'} to ${dest.name}. ` }),
+      document.createTextNode(
+        `${media.formatBytes(result.bytes)} written. Nothing on the card was changed.`
+      ),
+    ]));
+  }
+}
+
 async function wipeMedia() {
   state.confirmingWipe = false;
-  const result = await media.deleteAllMedia(state.dir);
+  state.busy = 'Deleting…';
   await refreshMedia();
+
+  let result;
+  try {
+    result = await media.deleteAllMedia(state.dir, (done, total) => {
+      state.busy = `Deleting ${done} of ${total}`;
+      const label = $('media').querySelector('.busy');
+      if (label) label.textContent = state.busy;
+    });
+  } finally {
+    state.busy = null;
+    await refreshMedia();
+  }
 
   if (result.failed.length) {
     status('warn', el('div', {}, [
       el('strong', { textContent: `Deleted ${result.attempted - result.failed.length} of ${result.attempted} files. ` }),
-      document.createTextNode(`Could not remove: ${result.failed.map((f) => f.name).join(', ')}.`),
+      document.createTextNode(
+        `Could not remove ${result.failed.map((f) => f.name).join(', ')} — ${result.failed[0].reason}`
+      ),
     ]));
   } else {
     status('good', el('span', {}, [

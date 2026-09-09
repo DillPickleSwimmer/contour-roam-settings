@@ -32,9 +32,16 @@ up in, it leaves the `DCIM` folders themselves in place, and it reports files it
 delete instead of stopping at the first failure. Deletion is behind a confirmation step
 that names the file count and the space involved.
 
-The tests run this against a real temporary directory through a stand-in for
-`FileSystemDirectoryHandle`, rather than a mock. If you change deletion, keep the tests
-that assert what must *not* be removed.
+The same goes for copying: it must never overwrite a file already in the destination.
+
+The tests run all of this against a real temporary directory through a stand-in for
+`FileSystemDirectoryHandle`, rather than a mock. If you change deletion or copying, keep
+the tests that assert what must *not* be removed or overwritten.
+
+One gap to know about: the stand-in's `getFile()` has no `stream()`, so Node exercises the
+buffered copy branch while a browser takes the streaming `pipeTo` branch. When you change
+`copyAllTo`, check it in a browser too — a destination stand-in there must return a real
+`WritableStream`, because that is what `createWritable()` actually resolves to.
 
 ## Running things
 

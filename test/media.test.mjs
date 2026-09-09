@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readdir, readFile, stat, rm } from 'node:fs/promises';
+import { Buffer } from 'node:buffer';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
-import { listMedia, deleteAllMedia, readDefaults, classify, formatBytes } from '../src/media.js';
+import { listMedia, deleteAllMedia, copyAllTo, readDefaults, classify, formatBytes } from '../src/media.js';
 
 // Minimal stand-in for FileSystemDirectoryHandle over a real directory, so the
 // deletion path is exercised against actual files rather than a mock that
@@ -12,6 +13,14 @@ function fileHandle(path) {
   return {
     kind: 'file',
     name: basename(path),
+    async createWritable() {
+      const chunks = [];
+      return {
+        write: async (d) => chunks.push(Buffer.from(d)),
+        close: async () => writeFile(path, Buffer.concat(chunks)),
+        abort: async () => {},
+      };
+    },
     async getFile() {
       const [buf, st] = await Promise.all([readFile(path), stat(path)]);
       return {
@@ -38,9 +47,14 @@ function dirHandle(path) {
       if (!(await stat(child)).isDirectory()) throw new Error('not a directory');
       return dirHandle(child);
     },
-    async getFileHandle(name) {
+    async getFileHandle(name, opts = {}) {
       const child = join(path, name);
-      await stat(child);
+      try {
+        await stat(child);
+      } catch (err) {
+        if (!opts.create) throw err;
+        await writeFile(child, '');
+      }
       return fileHandle(child);
     },
     async removeEntry(name) {
@@ -146,4 +160,64 @@ test('formats sizes the way a person reads them', () => {
   assert.equal(formatBytes(512), '512 B');
   assert.equal(formatBytes(2048), '2.0 KB');
   assert.equal(formatBytes(91245666), '87 MB');
+});
+
+test('copy writes the files and leaves the card alone', async () => {
+  const { root, handle } = await makeCard();
+  const destPath = await mkdtemp(join(tmpdir(), 'out-'));
+  const dest = dirHandle(destPath);
+
+  const result = await copyAllTo(dest, await listMedia(handle));
+  assert.equal(result.copied, 2);
+  assert.deepEqual(result.failed, []);
+
+  assert.deepEqual((await readdir(destPath)).sort(), ['FILE0104.MP4', 'FILE0104.THM']);
+  assert.equal((await stat(join(destPath, 'FILE0104.MP4'))).size, 4096);
+  // The AppleDouble resource fork is junk and must not be copied out.
+  assert.ok(!(await readdir(destPath)).includes('._FILE0104.MP4'));
+  // Source untouched.
+  assert.equal((await readdir(join(root, 'DCIM', '100MEDIA'))).length, 3);
+});
+
+test('copying twice does not overwrite the first copy', async () => {
+  const { handle } = await makeCard();
+  const destPath = await mkdtemp(join(tmpdir(), 'out-'));
+  const dest = dirHandle(destPath);
+
+  await copyAllTo(dest, await listMedia(handle));
+  await copyAllTo(dest, await listMedia(handle));
+
+  const names = (await readdir(destPath)).sort();
+  assert.deepEqual(names, ['FILE0104 (2).MP4', 'FILE0104 (2).THM', 'FILE0104.MP4', 'FILE0104.THM']);
+});
+
+test('two DCIM folders reusing a filename both survive the copy', async () => {
+  const { root, handle } = await makeCard();
+  await mkdir(join(root, 'DCIM', '101MEDIA'));
+  await writeFile(join(root, 'DCIM', '101MEDIA', 'FILE0104.MP4'), Buffer.alloc(128));
+
+  const destPath = await mkdtemp(join(tmpdir(), 'out-'));
+  const result = await copyAllTo(dirHandle(destPath), await listMedia(handle));
+
+  assert.equal(result.copied, 3);
+  const names = (await readdir(destPath)).sort();
+  assert.deepEqual(names, ['FILE0104 (2).MP4', 'FILE0104.MP4', 'FILE0104.THM']);
+  // Both originals made it across at their real sizes.
+  const sizes = (await Promise.all(names.map(async (n) => (await stat(join(destPath, n))).size))).sort((a, b) => a - b);
+  assert.deepEqual(sizes, [128, 512, 4096]);
+});
+
+test('reports a file it could not copy and keeps going', async () => {
+  const { handle } = await makeCard();
+  const destPath = await mkdtemp(join(tmpdir(), 'out-'));
+  const dest = dirHandle(destPath);
+  const listing = await listMedia(handle);
+
+  const video = listing.folders[0].files.find((f) => f.name === 'FILE0104.MP4');
+  video.handle = { ...video.handle, getFile: async () => { throw new Error('read error'); } };
+
+  const result = await copyAllTo(dest, listing);
+  assert.equal(result.copied, 1);
+  assert.deepEqual(result.failed.map((f) => f.name), ['FILE0104.MP4']);
+  assert.deepEqual(await readdir(destPath), ['FILE0104.THM']);
 });

@@ -106,6 +106,78 @@ export async function deleteAllMedia(dir, onProgress) {
   return { attempted: total, failed, freed: listing.bytes };
 }
 
+// Picks a name that is free in the destination, so copying twice, or copying
+// two DCIM folders that reuse filenames, never silently overwrites anything.
+async function freeName(dest, name, taken) {
+  const exists = async (candidate) => {
+    if (taken.has(candidate)) return true;
+    try {
+      await dest.getFileHandle(candidate);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  if (!(await exists(name))) return name;
+
+  const dot = name.lastIndexOf('.');
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : '';
+  for (let n = 2; n < 1000; n++) {
+    const candidate = `${stem} (${n})${ext}`;
+    if (!(await exists(candidate))) return candidate;
+  }
+  throw new Error(`Too many copies of ${name} already in that folder`);
+}
+
+// Copies every recording and sidecar into a folder the user picked. Streams
+// rather than buffering, because a single clip off this camera can be most of a
+// gigabyte. Junk resource forks are skipped; a failure on one file is recorded
+// and the rest continue.
+export async function copyAllTo(dest, listing, onProgress) {
+  const queue = listing.folders.flatMap((folder) =>
+    folder.files.filter((f) => f.kind === 'video' || f.kind === 'sidecar')
+  );
+
+  const taken = new Set();
+  const failed = [];
+  let copied = 0;
+  let bytes = 0;
+
+  for (const [index, file] of queue.entries()) {
+    onProgress?.({ index, done: copied, total: queue.length, name: file.name });
+    try {
+      const source = await file.handle.getFile();
+      const name = await freeName(dest, file.name, taken);
+      taken.add(name);
+
+      const target = await dest.getFileHandle(name, { create: true });
+      const writable = await target.createWritable();
+      try {
+        if (typeof source.stream === 'function') {
+          // pipeTo closes the writable for us.
+          await source.stream().pipeTo(writable);
+        } else {
+          await writable.write(await source.arrayBuffer());
+          await writable.close();
+        }
+      } catch (err) {
+        await writable.abort?.();
+        throw err;
+      }
+
+      copied++;
+      bytes += file.size;
+    } catch (err) {
+      failed.push({ name: file.name, reason: err?.message || String(err) });
+    }
+  }
+
+  onProgress?.({ index: queue.length, done: copied, total: queue.length, name: null });
+  return { total: queue.length, copied, failed, bytes };
+}
+
 export async function readDefaults(dir, filename = 'FW_RTC_DEFAULTS.txt') {
   const handle = await dir.getFileHandle(filename);
   const buf = await (await handle.getFile()).arrayBuffer();
